@@ -41,6 +41,8 @@ public class ClickableSentenceView extends ViewGroup {
     //这个变量只是在measure的时候记录行数,方便计算的,不用管
     private int mRows = 0;
 
+    private String mKeyword;
+
     public ClickableSentenceView(Context context) {
         super(context);
     }
@@ -48,8 +50,8 @@ public class ClickableSentenceView extends ViewGroup {
     public ClickableSentenceView(Context context, AttributeSet attrs) {
         super(context, attrs);
         TypedArray a = context.obtainStyledAttributes(attrs, R.styleable.ClickableSentenceView);
-        mTextSize = px2sp(a.getDimensionPixelSize(R.styleable.ClickableSentenceView_WordsSize, 16));
-        mWordsInterval = a.getDimensionPixelSize(R.styleable.ClickableSentenceView_WordsInterval, sp2px(16));
+        mTextSize = a.getDimensionPixelSize(R.styleable.ClickableSentenceView_WordsSize, sp2px(16));
+        mWordsInterval = a.getDimensionPixelSize(R.styleable.ClickableSentenceView_WordsInterval, sp2px(8));
         mWordsColor = a.getColor(R.styleable.ClickableSentenceView_WordsColor, Color.BLACK);
         mWordsBackgroundColor = a.getColor(R.styleable.ClickableSentenceView_WordsBackgroundColor, Color.TRANSPARENT);
         mSentence = a.getString(R.styleable.ClickableSentenceView_Sentence);
@@ -101,7 +103,7 @@ public class ClickableSentenceView extends ViewGroup {
     /**
      * 单词间间距
      */
-    private int mWordsInterval = sp2px(16);
+    private int mWordsInterval = sp2px(8);
 
     public void setWordsIntervalPixel(int interval) {
         mWordsInterval = interval;
@@ -134,6 +136,7 @@ public class ClickableSentenceView extends ViewGroup {
     private OnWordClickListener onWordClickListener;
 
     public void setOnWordClickListener(OnWordClickListener onWordClickListener) {
+        this.setClickable(true);
         this.onWordClickListener = onWordClickListener;
     }
 
@@ -145,12 +148,16 @@ public class ClickableSentenceView extends ViewGroup {
      * ---------------------------------------------------------------------------------------------
      * 以下是初始化数据过程
      */
-
     public void setSentence(String sentence) {
+        setSentence(sentence, null);
+    }
+
+    public void setSentence(String sentence, String keyword) {
         if (sentence == null || sentence.equals("")) {
             return;
         }
         mSentence = sentence;
+        this.mKeyword = keyword;
         mSplitWords = splitSentence(sentence);
         if (mWordsTextView == null) {
             mWordsTextView = new ArrayList<>(mSplitWords.size());
@@ -160,24 +167,29 @@ public class ClickableSentenceView extends ViewGroup {
         }
         for (final String word : mSplitWords) {
             TextView tv = new TextView(getContext());
-            setTextViewStyle(tv);
+            if (keyword != null && !keyword.equals("")) {
+                if (word.equals(keyword)) {
+                    setKeywordStyle(tv);
+                }
+            } else {
+                setTextViewStyle(tv);
+            }
             tv.setText(word);
             /**
              * 给textView设置点击事件
              */
-            if (onWordClickListener == null) {
-                tv.setOnClickListener(new OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        if (onWordClickListener != null) {
-                            onWordClickListener.onWordClick(v, word);
-                        }
 
-                        //// TODO: 2016/10/25 同时父控件也接收到点击事件,可以对textView进行操作
-                        onWordClicked(v);
+            tv.setOnClickListener(new OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (onWordClickListener != null) {
+                        onWordClickListener.onWordClick(v, word);
                     }
-                });
-            }
+                    //// TODO: 2016/10/25 同时父控件也接收到点击事件,可以对textView进行操作
+                    onWordClicked(v);
+                }
+            });
+
             this.addView(tv);
             mWordsTextView.add(tv);
         }
@@ -186,6 +198,16 @@ public class ClickableSentenceView extends ViewGroup {
          */
         requestLayout();
         invalidate();
+    }
+
+    private void setKeywordStyle(TextView tv) {
+        tv.setTag(new Integer(1));  //这个是给keyword做个记号
+        tv.setTextColor(Color.GREEN);
+        tv.setTextSize(mTextSize);
+        tv.setBackgroundColor(mWordsBackgroundColor);
+        if (mTypeface != null) {
+            tv.setTypeface(mTypeface);
+        }
     }
 
     /**
@@ -250,8 +272,8 @@ public class ClickableSentenceView extends ViewGroup {
     /**
      * 这个方法使输入的句子能够按单词分开
      *
-     * @param sentence    输入一个整句
-     * @return      把句子里的单词按空格分开,放入一个ArrayList中返回
+     * @param sentence 输入一个整句
+     * @return 把句子里的单词按空格分开, 放入一个ArrayList中返回
      */
     private List<String> splitSentence(String sentence) {
         if (sentence == null || sentence.equals("")) {
@@ -496,7 +518,7 @@ public class ClickableSentenceView extends ViewGroup {
 
 
     @Override
-    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+    protected synchronized void onLayout(boolean changed, int l, int t, int r, int b) {
         if (mWordsTextView == null) {
             return;
         }
@@ -511,15 +533,10 @@ public class ClickableSentenceView extends ViewGroup {
             int count = mWordsTextView.size();
             for (int i = 0; i < count; i++) {
                 View child = mWordsTextView.get(i);
-                //如果是第一个元素,则贴左上放置
-                if (i == 0) {
-                    childLeft = parentLeft;
-                    childTop = parentTop;
-                } else {
-                    childLeft = childLeft + mWordsInterval;
-                }
+
                 //给child设置位置
                 child.layout(childLeft, childTop, childLeft + child.getMeasuredWidth(), childTop + child.getMeasuredHeight());
+                childLeft = childLeft + mWordsInterval + child.getMeasuredWidth();
             }
         } else {
             //如果有多行的情况下!!!!!!!!!!!!!!!!!!!
